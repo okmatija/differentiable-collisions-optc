@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Optimization Log Browser · differentiable-collisions</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --line:#283040;
+    --fg:#e6edf3; --mut:#8b97a7; --kept:#3fb950; --rej:#f85149;
+    --mile:#58a6ff; --amber:#e3b341; --accent:#7c9cff;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--fg);
+    font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  code,pre,.mono{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace}
+  .wrap{max-width:1280px;margin:0 auto;padding:22px}
+  header h1{margin:0 0 4px;font-size:20px;letter-spacing:.2px}
+  header .sub{color:var(--mut);font-size:13px}
+  .stats{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:10px 14px;min-width:120px}
+  .stat .k{color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.6px}
+  .stat .v{font-size:22px;font-weight:600;margin-top:2px}
+  .grid{display:grid;grid-template-columns:1fr 340px;gap:16px;align-items:start}
+  @media(max-width:980px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .card h2{margin:0 0 10px;font-size:14px;font-weight:600;color:var(--fg)}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .seg button{background:var(--panel2);color:var(--mut);border:0;padding:6px 11px;
+    cursor:pointer;font-size:12px}
+  .seg button.on{background:var(--accent);color:#0b0e14;font-weight:600}
+  .legend{display:flex;gap:14px;color:var(--mut);font-size:12px;margin-left:auto;flex-wrap:wrap}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .dot{width:10px;height:10px;border-radius:50%}
+  .dia{width:10px;height:10px;transform:rotate(45deg)}
+  svg{display:block;width:100%;height:auto;touch-action:none}
+  .gline{stroke:var(--line);stroke-width:1}
+  .tgt{stroke:var(--amber);stroke-dasharray:4 4;stroke-width:1;opacity:.55}
+  .tgt-l{fill:var(--amber);font-size:10px;opacity:.8}
+  .axlbl{fill:var(--mut);font-size:10px}
+  .cursor{stroke:var(--accent);stroke-width:1;opacity:.7}
+  .pin{stroke:var(--fg);stroke-width:1.3;stroke-dasharray:2 4;opacity:.55}
+  #tip{position:fixed;pointer-events:none;z-index:30;background:#0b0e14;
+    border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px;
+    max-width:280px;display:none;box-shadow:0 6px 24px #0008}
+  #tip .t{font-weight:600;margin-bottom:2px}
+  #tip .m{color:var(--mut)}
+  .detail{margin-top:16px}
+  .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;
+    font-weight:600;vertical-align:middle}
+  .b-kept{background:rgba(63,185,80,.16);color:var(--kept)}
+  .b-rejected{background:rgba(248,81,73,.16);color:var(--rej)}
+  .b-milestone{background:rgba(88,166,255,.16);color:var(--mile)}
+  .b-info{background:#2a3242;color:var(--mut)}
+  .detail .head{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+  .detail .id{font-weight:700;font-size:16px}
+  .detail .meta{color:var(--mut);font-size:12px;margin:4px 0 10px}
+  .md h3{font-size:14px;margin:16px 0 6px;color:var(--accent)}
+  .md h4{font-size:13px;margin:13px 0 5px;color:var(--fg)}
+  .md p{margin:8px 0}
+  .md ul{margin:8px 0;padding-left:20px}
+  .md li{margin:3px 0}
+  .md code{background:var(--panel2);padding:1px 5px;border-radius:5px;font-size:12px}
+  .md pre{background:var(--panel2);padding:10px;border-radius:8px;overflow:auto}
+  .md pre code{background:none;padding:0}
+  .md table{border-collapse:collapse;margin:10px 0;font-size:12px;width:100%}
+  .md th,.md td{border:1px solid var(--line);padding:4px 8px;text-align:left}
+  .md th{background:var(--panel2)}
+  .list{max-height:560px;overflow:auto}
+  .row{display:flex;gap:8px;align-items:center;padding:7px 8px;border-radius:8px;
+    cursor:pointer;border:1px solid transparent}
+  .row:hover{background:var(--panel2)}
+  .row.sel{background:var(--panel2);border-color:var(--accent)}
+  .row .pip{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
+  .row .rid{width:46px;color:var(--mut);font-size:11px;flex:0 0 auto}
+  .row .rt{flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .row .rs{font-size:12px;font-weight:600;color:var(--mut)}
+  .filters{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap}
+  input.search{width:100%;background:var(--panel2);border:1px solid var(--line);
+    color:var(--fg);border-radius:8px;padding:7px 10px;margin-bottom:8px;font-size:12px}
+  .extras{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:16px}
+  @media(max-width:980px){.extras{grid-template-columns:1fr}}
+  .bar{height:9px;background:var(--panel2);border-radius:5px;overflow:hidden;margin:3px 0 8px}
+  .bar > i{display:block;height:100%}
+  .tokrow{font-size:12px}
+  .tokrow .lab{display:flex;justify-content:space-between;color:var(--mut)}
+  .links a{display:block;padding:7px 0;border-bottom:1px solid var(--line)}
+  .links a:last-child{border-bottom:0}
+  .foot{color:var(--mut);font-size:12px;margin-top:18px}
+  .donut-wrap{display:flex;align-items:center;gap:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Optimization Log Browser</h1>
+    <div class="sub mono">src-optimized/OPTIMIZATION-LOG.md · narrow-phase collision solver · reference → optimized speedup</div>
+  </header>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="toolbar">
+        <h2 style="margin:0">Speedup over iterations</h2>
+        <div class="seg" id="metric">
+          <button data-m="speedup" class="on">Speedup&nbsp;×</button>
+          <button data-m="opt_ms">Runtime&nbsp;ms</button>
+        </div>
+        <div class="legend">
+          <span><i class="dot" style="background:var(--kept)"></i>kept</span>
+          <span><i class="dot" style="background:var(--rej)"></i>rejected</span>
+          <span><i class="dia" style="background:var(--mile)"></i>milestone</span>
+        </div>
+      </div>
+      <div id="chart"></div>
+      <div class="detail" id="detail"></div>
+    </div>
+
+    <div class="card">
+      <h2>All entries</h2>
+      <input class="search" id="search" placeholder="search title / id…" />
+      <div class="filters seg" id="filters">
+        <button data-f="all" class="on">All</button>
+        <button data-f="kept">Kept</button>
+        <button data-f="rejected">Rejected</button>
+        <button data-f="milestone">Milestones</button>
+      </div>
+      <div class="list" id="list"></div>
+    </div>
+  </div>
+
+  <div class="extras">
+    <div class="card">
+      <h2>Hypothesis batting average</h2>
+      <div class="donut-wrap">
+        <svg id="donut" width="120" height="120" viewBox="0 0 120 120"></svg>
+        <div id="donutleg" style="font-size:13px"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Recorded token cost</h2>
+      <div id="tokens" style="font-size:12px;color:var(--mut)"></div>
+    </div>
+    <div class="card">
+      <h2>Explore the repo</h2>
+      <div class="links" id="links"></div>
+    </div>
+  </div>
+
+  <div class="foot mono" id="foot"></div>
+</div>
+
+<div id="tip"></div>
+
+<script>
+const C = getComputedStyle(document.documentElement);
+const COL = n => C.getPropertyValue(n).trim();
+const colDecision = d => ({kept:COL('--kept'),rejected:COL('--rej'),
+  milestone:COL('--mile'),info:COL('--mut')}[d]||COL('--mut'));
+
+let DATA=[], METRIC='speedup', FILTER='all', SEARCH='', selected=null, pinned=null;
+
+// ---------- minimal markdown -> html ----------
+function esc(s){return s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+function inline(s){
+  return esc(s)
+    .replace(/`([^`]+)`/g,'<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2">$1</a>');
+}
+function mdToHtml(md){
+  const lines = md.split('\n'); let out=[], i=0;
+  while(i<lines.length){
+    let ln=lines[i];
+    if(/^```/.test(ln)){ let buf=[]; i++;
+      while(i<lines.length && !/^```/.test(lines[i])){buf.push(esc(lines[i]));i++;}
+      i++; out.push('<pre><code>'+buf.join('\n')+'</code></pre>'); continue; }
+    if(/^\s*\|/.test(ln)){ let tb=[];
+      while(i<lines.length && /^\s*\|/.test(lines[i])){tb.push(lines[i]);i++;}
+      out.push(renderTable(tb)); continue; }
+    let h=ln.match(/^(#{3,4})\s+(.*)$/);
+    if(h){ const t=h[1].length===3?'h3':'h4'; out.push(`<${t}>${inline(h[2])}</${t}>`); i++; continue; }
+    if(/^\s*[-*]\s+/.test(ln)){ let items=[];
+      while(i<lines.length && /^\s*[-*]\s+/.test(lines[i])){
+        let it=lines[i].replace(/^\s*[-*]\s+/,''); i++;
+        while(i<lines.length && lines[i].trim() && !/^\s*[-*]\s+/.test(lines[i])
+              && !/^\s*\|/.test(lines[i]) && !/^#{3,4}\s/.test(lines[i])){
+          it+=' '+lines[i].trim(); i++; }
+        items.push('<li>'+inline(it)+'</li>');
+      }
+      out.push('<ul>'+items.join('')+'</ul>'); continue; }
+    if(!ln.trim()){ i++; continue; }
+    let para=[ln]; i++;
+    while(i<lines.length && lines[i].trim() && !/^\s*[-*]\s+/.test(lines[i])
+          && !/^\s*\|/.test(lines[i]) && !/^#{3,4}\s/.test(lines[i]) && !/^```/.test(lines[i])){
+      para.push(lines[i]); i++; }
+    out.push('<p>'+inline(para.join(' '))+'</p>');
+  }
+  return out.join('\n');
+}
+function renderTable(rows){
+  rows=rows.filter(r=>r.trim());
+  const cells=r=>r.trim().replace(/^\||\|$/g,'').split('|').map(c=>c.trim());
+  const head=cells(rows[0]);
+  let body=rows.slice(1);
+  if(body[0] && /^[\s|:-]+$/.test(body[0])) body=body.slice(1);
+  let h='<table><thead><tr>'+head.map(c=>'<th>'+inline(c)+'</th>').join('')+'</tr></thead><tbody>';
+  for(const r of body){ const c=cells(r);
+    h+='<tr>'+c.map(x=>'<td>'+inline(x)+'</td>').join('')+'</tr>'; }
+  return h+'</tbody></table>';
+}
+
+// ---------- chart ----------
+const SVGNS='http://www.w3.org/2000/svg';
+function el(n,a){const e=document.createElementNS(SVGNS,n);for(const k in a)e.setAttribute(k,a[k]);return e;}
+
+function plotPoints(){ return DATA.filter(d=>d[METRIC]!=null && !d.is_section); }
+
+function drawChart(){
+  const host=document.getElementById('chart'); host.innerHTML='';
+  const W=720,H=360,m={l:46,r:16,t:14,b:34};
+  const pts=plotPoints();
+  const xs=DATA.map(d=>d.index);
+  const xmin=Math.min(...xs), xmax=Math.max(...xs);
+  const vals=pts.map(d=>d[METRIC]);
+  let vmin=Math.min(...vals), vmax=Math.max(...vals);
+  if(METRIC==='speedup'){vmin=0; vmax=Math.max(vmax,105);}
+  else {vmin=Math.max(0,vmin-0.4); vmax=vmax+0.4;}
+  const X=i=>m.l+(i-xmin)/(xmax-xmin)*(W-m.l-m.r);
+  const Y=v=>H-m.b-(v-vmin)/(vmax-vmin)*(H-m.t-m.b);
+  const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,preserveAspectRatio:'xMidYMid meet'});
+
+  // y gridlines + labels
+  const ticks=5;
+  for(let k=0;k<=ticks;k++){
+    const v=vmin+(vmax-vmin)*k/ticks, y=Y(v);
+    svg.appendChild(el('line',{class:'gline',x1:m.l,y1:y,x2:W-m.r,y2:y}));
+    const lab=el('text',{class:'axlbl',x:m.l-6,y:y+3,'text-anchor':'end'});
+    lab.textContent=METRIC==='speedup'?v.toFixed(0)+'×':v.toFixed(1);
+    svg.appendChild(lab);
+  }
+  // target lines for speedup
+  if(METRIC==='speedup'){
+    for(const t of [50,100]){ if(t<=vmax){ const y=Y(t);
+      svg.appendChild(el('line',{class:'tgt',x1:m.l,y1:y,x2:W-m.r,y2:y}));
+      const tl=el('text',{class:'tgt-l',x:W-m.r,y:y-3,'text-anchor':'end'});
+      tl.textContent=t+'× target'; svg.appendChild(tl);
+    }}
+  }
+  // x ticks (sparse)
+  for(let i=xmin;i<=xmax;i+=5){
+    const x=X(i);
+    const lab=el('text',{class:'axlbl',x:x,y:H-m.b+16,'text-anchor':'middle'});
+    lab.textContent=i; svg.appendChild(lab);
+  }
+  const xt=el('text',{class:'axlbl',x:(m.l+W-m.r)/2,y:H-4,'text-anchor':'middle'});
+  xt.textContent='entry index →'; svg.appendChild(xt);
+
+  // connecting line through experiments (kept/rejected) only
+  const exp=pts.filter(d=>d.decision==='kept'||d.decision==='rejected');
+  if(exp.length>1){
+    let dpath='M'+exp.map(d=>X(d.index)+','+Y(d[METRIC])).join(' L');
+    svg.appendChild(el('path',{d:dpath,fill:'none',stroke:COL('--accent'),
+      'stroke-width':1.6,opacity:.45,'stroke-linejoin':'round'}));
+  }
+  // pinned guide (dotted, persists with the clicked entry) + cursor guide
+  // (solid, follows the mouse). Pinned is drawn first so the cursor sits on top.
+  const pinGuide=el('line',{class:'pin',x1:0,y1:m.t,x2:0,y2:H-m.b,visibility:'hidden'});
+  svg.appendChild(pinGuide);
+  const guide=el('line',{class:'cursor',x1:0,y1:m.t,x2:0,y2:H-m.b,visibility:'hidden'});
+  svg.appendChild(guide);
+
+  // points
+  const nodes=[];
+  for(const d of pts){
+    const x=X(d.index), y=Y(d[METRIC]); let node;
+    if(d.decision==='milestone'){
+      node=el('rect',{x:x-5,y:y-5,width:10,height:10,fill:colDecision(d.decision),
+        transform:`rotate(45 ${x} ${y})`,stroke:'#0b0e14','stroke-width':1});
+    }else{
+      node=el('circle',{cx:x,cy:y,r:4.5,fill:colDecision(d.decision),
+        stroke:'#0b0e14','stroke-width':1});
+    }
+    node.style.cursor='pointer';
+    node.addEventListener('click',()=>{pinned=d.index;select(d.index,true);});
+    svg.appendChild(node);
+    nodes.push({d,x,y,node});
+  }
+
+  host.appendChild(svg);
+
+  // interaction: hovering anywhere (incl. the x-axis) previews nearest entry
+  function nearest(px){
+    let best=null,bd=1e9;
+    for(const n of nodes){ const dd=Math.abs(n.x-px); if(dd<bd){bd=dd;best=n;} }
+    return best;
+  }
+  function pos(evt){
+    const r=svg.getBoundingClientRect();
+    return (evt.clientX-r.left)/r.width*W;
+  }
+  svg.addEventListener('mousemove',evt=>{
+    const px=pos(evt); const n=nearest(px); if(!n)return;
+    guide.setAttribute('visibility','visible');
+    guide.setAttribute('x1',n.x); guide.setAttribute('x2',n.x);
+    nodes.forEach(o=>o.node.setAttribute('r', o===n?6:4.5));
+    showTip(evt,n.d);          // hover only updates the graph tooltip/cursor
+  });
+  svg.addEventListener('mouseleave',()=>{
+    guide.setAttribute('visibility','hidden'); hideTip();
+    nodes.forEach(o=>{if(o.node.tagName==='circle')o.node.setAttribute('r',4.5);});
+  });
+
+  // Position the dotted pinned guide on the currently pinned entry. Exposed so
+  // clicks (from points or the list) and metric redraws can re-place it.
+  placePinnedGuide=function(){
+    const n=(pinned!=null) ? nodes.find(o=>o.d.index===pinned) : null;
+    if(!n){ pinGuide.setAttribute('visibility','hidden'); return; }
+    pinGuide.setAttribute('visibility','visible');
+    pinGuide.setAttribute('x1',n.x); pinGuide.setAttribute('x2',n.x);
+  };
+  placePinnedGuide();
+  chartNodes=nodes;
+}
+let chartNodes=[], placePinnedGuide=null;
+
+// ---------- tooltip ----------
+const tip=document.getElementById('tip');
+function showTip(evt,d){
+  tip.style.display='block';
+  tip.innerHTML=`<div class="t">${d.id} · ${esc(d.title||'')}</div>`+
+    `<div class="m">${d.decision} · ${d.speedup?d.speedup+'×':''}`+
+    `${d.opt_ms?' · '+d.opt_ms+' ms':''}${d.date?' · '+d.date:''}</div>`;
+  const pad=14; let x=evt.clientX+pad, y=evt.clientY+pad;
+  if(x+290>innerWidth)x=evt.clientX-290;
+  tip.style.left=x+'px'; tip.style.top=y+'px';
+}
+function hideTip(){tip.style.display='none';}
+
+// ---------- detail + list ----------
+function select(idx,pin){
+  selected=idx;
+  if(pin){ pinned=idx; if(placePinnedGuide) placePinnedGuide(); }
+  const d=DATA.find(e=>e.index===idx); if(!d)return;
+  const det=document.getElementById('detail');
+  det.innerHTML=
+    `<div class="head"><span class="id">${d.id}</span>`+
+    `<span class="badge b-${d.decision}">${d.decision}</span>`+
+    (d.speedup?`<span class="badge b-info">${d.speedup}×</span>`:'')+
+    `<span style="color:var(--mut)">${esc(d.title||'')}</span></div>`+
+    `<div class="meta">`+
+      (d.date?`📅 ${d.date} · `:'')+
+      (d.opt_ms?`optimized ${d.opt_ms} ms · `:'')+
+      (d.ref_median?`reference ${(d.ref_median*1000).toFixed(0)} ms · `:'')+
+      (d.tokens?`🪙 ${d.tokens.toLocaleString()} tokens · `:'')+
+      `entry #${d.index}`+
+    `</div>`+
+    `<div class="md">${mdToHtml(d.markdown||'')}</div>`;
+  document.querySelectorAll('.row').forEach(r=>
+    r.classList.toggle('sel', +r.dataset.idx===idx));
+}
+
+function passes(d){
+  if(FILTER!=='all' && d.decision!==FILTER) return false;
+  if(SEARCH){ const s=(d.id+' '+d.title).toLowerCase();
+    if(!s.includes(SEARCH)) return false; }
+  return true;
+}
+function drawList(){
+  const host=document.getElementById('list'); host.innerHTML='';
+  for(const d of DATA){
+    if(d.is_section) continue;
+    if(!passes(d)) continue;
+    const row=document.createElement('div');
+    row.className='row'; row.dataset.idx=d.index;
+    row.innerHTML=`<span class="pip" style="background:${colDecision(d.decision)}"></span>`+
+      `<span class="rid mono">${d.id.replace('Iteration','It')}</span>`+
+      `<span class="rt">${esc(d.title||d.id)}</span>`+
+      `<span class="rs">${d.speedup?d.speedup+'×':''}</span>`;
+    row.addEventListener('click',()=>{pinned=d.index;select(d.index,true);});
+    host.appendChild(row);
+  }
+}
+
+// ---------- extras ----------
+function drawStats(){
+  const exp=DATA.filter(d=>d.decision==='kept'||d.decision==='rejected');
+  const kept=DATA.filter(d=>d.decision==='kept').length;
+  const rej=DATA.filter(d=>d.decision==='rejected').length;
+  const best=Math.max(...DATA.filter(d=>d.speedup).map(d=>d.speedup));
+  const fastest=Math.min(...DATA.filter(d=>d.opt_ms).map(d=>d.opt_ms));
+  const toks=DATA.reduce((a,d)=>a+(d.tokens||0),0);
+  const S=[['Peak speedup',best.toFixed(1)+'×'],
+    ['Fastest runtime',fastest.toFixed(2)+' ms'],
+    ['Hypotheses tried',exp.length],
+    ['Kept / Rejected',kept+' / '+rej],
+    ['Recorded tokens',(toks/1e6).toFixed(1)+'M']];
+  document.getElementById('stats').innerHTML=
+    S.map(([k,v])=>`<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+}
+function drawDonut(){
+  const kept=DATA.filter(d=>d.decision==='kept').length;
+  const rej=DATA.filter(d=>d.decision==='rejected').length;
+  const tot=kept+rej, svg=document.getElementById('donut');
+  const r=46,cx=60,cy=60,circ=2*Math.PI*r;
+  const keptLen=circ*kept/tot;
+  svg.innerHTML=
+    `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${COL('--rej')}" stroke-width="16"/>`+
+    `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${COL('--kept')}" stroke-width="16"`+
+    ` stroke-dasharray="${keptLen} ${circ-keptLen}" stroke-dashoffset="${circ*0.25}" transform="rotate(-90 ${cx} ${cy})"/>`+
+    `<text x="${cx}" y="${cy-2}" text-anchor="middle" fill="${COL('--fg')}" font-size="20" font-weight="700">${Math.round(100*kept/tot)}%</text>`+
+    `<text x="${cx}" y="${cy+14}" text-anchor="middle" fill="${COL('--mut')}" font-size="9">kept</text>`;
+  document.getElementById('donutleg').innerHTML=
+    `<div><b style="color:${COL('--kept')}">${kept}</b> kept &nbsp; `+
+    `<b style="color:${COL('--rej')}">${rej}</b> rejected</div>`+
+    `<div style="color:var(--mut);margin-top:6px">Every kept change passed the full<br>correctness + determinism + contact gates.</div>`;
+}
+function drawTokens(){
+  const t=DATA.filter(d=>d.tokens).sort((a,b)=>b.tokens-a.tokens);
+  const max=Math.max(...t.map(d=>d.tokens));
+  document.getElementById('tokens').innerHTML= t.length? t.map(d=>
+    `<div class="tokrow"><div class="lab"><span>${d.id} ${esc((d.title||'').slice(0,22))}</span>`+
+    `<span>${(d.tokens/1e3).toFixed(0)}k</span></div>`+
+    `<div class="bar"><i style="width:${100*d.tokens/max}%;background:${colDecision(d.decision)}"></i></div></div>`
+  ).join('') : 'No per-entry token costs recorded.';
+}
+function drawLinks(){
+  document.getElementById('links').innerHTML=
+    `<a href="../viz/index.html">🧊 3D collision-pair visualizer (WebGL)</a>`+
+    `<a href="../README.md">📄 Project README</a>`+
+    `<a href="../src-optimized/OPTIMIZATION-LOG.md">📝 Raw OPTIMIZATION-LOG.md</a>`+
+    `<a href="../documents/2207.00669.pdf">📚 Source paper (2207.00669)</a>`+
+    `<a href="../prompts/create-optimized.md">⚙️ The prompt that drove these iterations</a>`;
+}
+
+// ---------- wire up ----------
+document.getElementById('metric').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b)return;
+  METRIC=b.dataset.m;
+  document.querySelectorAll('#metric button').forEach(x=>x.classList.toggle('on',x===b));
+  drawChart();
+});
+document.getElementById('filters').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b)return;
+  FILTER=b.dataset.f;
+  document.querySelectorAll('#filters button').forEach(x=>x.classList.toggle('on',x===b));
+  drawList();
+});
+document.getElementById('search').addEventListener('input',e=>{
+  SEARCH=e.target.value.toLowerCase().trim(); drawList();
+});
+
+fetch('data.json').then(r=>r.json()).then(j=>{
+  DATA=j.entries;
+  drawStats(); drawChart(); drawList(); drawDonut(); drawTokens(); drawLinks();
+  const last=DATA.filter(d=>d.speedup).slice(-1)[0];
+  pinned=last.index; select(last.index,true);
+  document.getElementById('foot').textContent=
+    `${DATA.length} entries parsed from ${j.source} · regenerate with build.py`;
+}).catch(err=>{
+  document.getElementById('chart').innerHTML=
+    '<p style="color:var(--rej)">Could not load data.json — run build.py and serve over http (not file://).</p>';
+  console.error(err);
+});
+</script>
+</body>
+</html>
